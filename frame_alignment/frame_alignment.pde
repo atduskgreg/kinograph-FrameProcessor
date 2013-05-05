@@ -22,7 +22,7 @@ float medianAngle = 0;
 Point[] medianLine;
 
 void setup() {
-  src = loadImage("_MG_9553.JPG");
+  src = loadImage("_MG_1264.JPG");
   src.resize(500, 0);
   size(src.width*2, src.height);
   opencv = new OpenCVPro(this, src.width, src.height);

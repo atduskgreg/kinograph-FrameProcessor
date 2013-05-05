@@ -52,12 +52,12 @@ import org.opencv.core.Point;
 
 import java.awt.Rectangle;
 
-int resizedImageWidth = 500;
-int roiTop = 270;
-int roiHeight = 300;
-int searchColumn = 70;
-int distanceBetweenSprockets = 32;
-int minVerticalEdgeLength = 175;
+int resizedImageWidth = 640;
+int roiTop = 280;
+int roiHeight = 350;
+int searchColumn = 570;
+int distanceBetweenSprockets = 45;
+int minVerticalEdgeLength = 150;
 
 OpenCVPro sprocketProcessor, edgeProcessor;
 PImage src, dst, dst2, output;
@@ -84,7 +84,7 @@ Rectangle roi;
 
 void setup() {
   // load source image and resize it
-  src = loadImage("_MG_9859.JPG");
+  src = loadImage("_MG_1264.JPG");
   src.resize(resizedImageWidth, 0);
 
   size(src.width*2, src.height);
@@ -108,7 +108,10 @@ void setup() {
   // filter image to bring out horizontal lines
   // and binarize it
   sprocketProcessor.findSobelEdges(0, 2);
-  sprocketProcessor.threshold(50);
+  
+  Imgproc.dilate(sprocketProcessor.getBufferGray(), sprocketProcessor.getBufferGray(), new Mat());
+  sprocketProcessor.threshold(30);
+
   
   // create opencv object for finding left and right of frame
   edgeProcessor = new OpenCVPro(this, roi.width, roi.height);
@@ -118,7 +121,11 @@ void setup() {
   // and binarize it
   edgeProcessor.equalizeHistogram();
   edgeProcessor.findSobelEdges(2, 0);
-  edgeProcessor.threshold(150);
+  
+//    Imgproc.erode(edgeProcessor.getBufferGray(), edgeProcessor.getBufferGray(), new Mat());
+
+  
+  edgeProcessor.threshold(100);
 
   //Imgproc.dilate(opencv2.getBufferGray(), opencv2.getBufferGray(), new Mat());
 
@@ -185,16 +192,18 @@ void setup() {
   // i.e. straight lines
   approximations = createPolygonApproximations(contours);
 
+  println("num approximations: " + approximations.size());
+
   // the x-positions of these two are the left and right edges
   // of the frame
   float frameRight = (float)approximations.get(0).toArray()[0].x;
-  float frameLeft = (float)approximations.get(1).toArray()[0].x;
+  float frameLeft = (float)approximations.get(2).toArray()[0].x;
 
   // === CALCULATE THE FRAME LOCATION and EXTRACT IT ===
   
   // make a rectangle starting at frameLeft and topSprocket.top
   // and extending the width and height of the frame
-  selectedArea = new Rectangle((int)frameLeft, topSprocket.top, (int)(frameRight-frameLeft), bottomSprocket.bottom-topSprocket.top);
+  selectedArea = new Rectangle((int)frameLeft, topSprocket.top, (int)abs(frameRight-frameLeft), abs(bottomSprocket.bottom-topSprocket.top));
   // create a PImage for output and copy
   // the pixels from the source image into it.
   // NB: have to adjust the y-position down by the y-position of the ROI
@@ -264,7 +273,7 @@ void draw() {
   image(dst2, src.width * 4.0/3, roi.height + 10);
   popMatrix();
   
-  image(output,src.width + 10, height-output.height-10);
+  image(output,src.width + 10,roi.height + 200);
   noFill();
   strokeWeight(4);
 
@@ -292,3 +301,6 @@ void draw() {
   rect(selectedArea.x, selectedArea.y, selectedArea.width, selectedArea.height);
 }
 
+void mouseMoved(){
+  println(mouseX);
+}
