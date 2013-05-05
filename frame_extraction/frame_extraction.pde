@@ -10,12 +10,15 @@ It uses vertical contours in the image to find the sides of the frame.
 
 Adjustable variables:
 
+inputFilename - name of input scanned frame to be processed (assume to be in data/ folder)
 resizedImageWidth - resize original image to this width (keep proportions). bigger is slower. IMPORTANT: determines output image resolution.
 roiTop - the top of the area to look for the frame (must include the frame's top sprocket and no above full sprocket)
 roiHeight - the height of the area to look for the frame (must be tall enough to include the frame's bottom sprocket and no full lower sprockets)
 searchColumn - which column in the image to look for the sprockets
 distanceBetweenSprockets - number of pixels between sprockets
 minVerticalEdgeLength - adjust down if it crashes looking for the side of the frame
+frameWidth - the width of the output frame in pixels (as observed after resizing the image to resizedImageWidth)
+frameHeight - the height of the output frame in pixels (as observed after resizing the image to resizedImageWidth)
 
 Detection technique:
 
@@ -25,16 +28,16 @@ Detection technique:
 ** Find y-dimension sobel edges in the ROI
 ** Threshold sobel image
 ** Look at each row of the image at the searchColumn y-position
-** If the pixel is white, we've found the edge of a sprocket
-** Use the distance between the sprocket lines to ensure we've only found complete sprockets (ones with both top and bottom)
-** Top of top sprocket is the top of the frame, bottom of bottom sprocket is the bottom of the frame
+** If the pixel is white (and the one above it was not), we've found the edge of the top sprocket
+** Top of top sprocket is the top of the frame, measure the fixed frameHeight from there to find the bottom of the frame
 * To find the left and right sides of the frame:
 ** Find x-dimension sobel edges in the ROI
 ** Threshold sobel image
 ** Find contours in the sobel image
 ** Remove short contours (those shorter than minVerticalEdgeLength)
 ** Calculate polygon approximations of contours to turn them into straight lines
-* Calculate coordinates of frame based on frame edges, top and bottom
+* Find the rightmost frame edge candidate (that's to the left of the sprocket searchColumn)
+* Measure the fixed frameWidth left to determine the left side of the frame
 * Copy out portion of source image based on these coordinates
 
 */
@@ -52,12 +55,15 @@ import org.opencv.core.Point;
 
 import java.awt.Rectangle;
 
-int resizedImageWidth = 640;
-int roiTop = 280;
-int roiHeight = 350;
-int searchColumn = 570;
-int distanceBetweenSprockets = 45;
+String inputFilename = "_MG_1267.JPG";
+int resizedImageWidth = 1107; // to scale to 640x480 frame size
+int roiTop = 485;
+int roiHeight = 605;
+int searchColumn = 986;
+int distanceBetweenSprockets = 78;
 int minVerticalEdgeLength = 150;
+int frameWidth = 640;
+int frameHeight = 480;
 
 OpenCVPro sprocketProcessor, edgeProcessor;
 PImage src, dst, dst2, output;
@@ -67,27 +73,15 @@ Rectangle selectedArea;
 ArrayList<MatOfPoint> contours;
 ArrayList<MatOfPoint2f> approximations;
 
-class Sprocket {
-  int top;
-  int bottom;
-
-  Sprocket(int top, int bottom) {
-    this.top = top;
-    this.bottom = bottom;
-  }
-}
-
-ArrayList<Sprocket> sprockets;
-
 Rectangle roi;
 
 
 void setup() {
   // load source image and resize it
-  src = loadImage("_MG_1264.JPG");
+  src = loadImage(inputFilename);
   src.resize(resizedImageWidth, 0);
 
-  size(src.width*2, src.height);
+  size(src.width, src.height);
 
   // setup ROI
   roi = new Rectangle(0, roiTop, src.width, roiHeight);
@@ -134,52 +128,22 @@ void setup() {
   dst = createImage(src.width, src.height, ARGB);
   sprocketProcessor.toPImage(sprocketProcessor.getBufferGray(), dst);
 
-  // === BEGIN FIND TOP AND BOTTOM SPROCKETS ===
+  // === BEGIN FIND TOP SPROCKETS EDGE ===
   
-  // find all sprocket edges
-  // loop through rows of image one at a time
-  // if this row has a white pixel at the searchColumn
-  // and the previous row did not
-  // then this row is a sprocket edge
-  ArrayList<Integer> sprocketEdges = new ArrayList<Integer>();
+  // it's the topmost white pixel in the searchColumn
+  
+  int topSprocketEdge = 0;
 
-  for (int row = 1; row < dst.height; row++) {
-    int prevI = searchColumn + (row-1)*dst.width;
-    int thisI = searchColumn + row*dst.width;
+  for (int row = 0; row < dst.height; row++) {
+    int i = searchColumn + row*dst.width;
 
-    boolean thisRow = brightness(dst.pixels[thisI]) > 0 ;
-    boolean prevRow = brightness(dst.pixels[prevI]) > 0;
-
-    if (thisRow && !prevRow) {
-      sprocketEdges.add(row);
+    if (brightness(dst.pixels[i]) > 0) {
+      topSprocketEdge = row;
+      break;
     }
   }
 
-  // Now we need to combine the sprocketEdges into 
-  // sprockets based on the distance between them.
-  // loop over them and ad adjcacent edges as a
-  // sprocket only if the distance between them is
-  // less than our threshold.
-  // Key idea: distance between sprocket holes
-  // is larger than height of individual sprocket hole.
-  sprockets = new ArrayList<Sprocket>();
-
-  // loop over sprocketEdges and determine pairs
-  for (int i = 1; i < sprocketEdges.size(); i++) {
-    int prev = sprocketEdges.get(i-1);
-    int curr = sprocketEdges.get(i);
-
-    if (abs(curr - prev) < distanceBetweenSprockets) {
-      sprockets.add(new Sprocket(prev, curr));
-    }
-  }
-
-  // first sprocket is the top one
-  // last is the bottom one
-  Sprocket topSprocket = sprockets.get(0);
-  Sprocket bottomSprocket = sprockets.get(sprockets.size()-1);
-  
-  // === BEGIN FIND LEFT AND RIGHT FRAME EDGES ===
+  // === BEGIN FIND RIGHT FRAME EDGE ===
 
   // find contours in the filtered edge image
   contours = new ArrayList<MatOfPoint>();
@@ -194,22 +158,33 @@ void setup() {
 
   println("num approximations: " + approximations.size());
 
+  // find the rightmost approximation
+  float frameRight = 0;
+  for(MatOfPoint2f edge : approximations){
+    float edgeX = (float)edge.toArray()[0].x;
+    if(edgeX > frameRight && edgeX < searchColumn){
+      frameRight = edgeX;
+    }
+  }
+  
+  float frameLeft = frameRight - frameWidth;
+  
   // the x-positions of these two are the left and right edges
   // of the frame
-  float frameRight = (float)approximations.get(0).toArray()[0].x;
-  float frameLeft = (float)approximations.get(2).toArray()[0].x;
+  //float frameRight = (float)approximations.get(0).toArray()[0].x;
+  //float frameLeft = (float)approximations.get(2).toArray()[0].x;
 
   // === CALCULATE THE FRAME LOCATION and EXTRACT IT ===
   
   // make a rectangle starting at frameLeft and topSprocket.top
   // and extending the width and height of the frame
-  selectedArea = new Rectangle((int)frameLeft, topSprocket.top, (int)abs(frameRight-frameLeft), abs(bottomSprocket.bottom-topSprocket.top));
+  selectedArea = new Rectangle((int)frameLeft, topSprocketEdge, frameWidth, frameHeight);
   // create a PImage for output and copy
   // the pixels from the source image into it.
   // NB: have to adjust the y-position down by the y-position of the ROI
   output = createImage(selectedArea.width, selectedArea.height, ARGB);
   output.copy(src, selectedArea.x, roi.y + selectedArea.y, selectedArea.width, selectedArea.height, 0,0,selectedArea.width, selectedArea.height);
-  
+    
   // convert edgeProcessor image into PImage for display (debugging only)
   dst2 = createImage(src.width, src.height, ARGB);
   edgeProcessor.toPImage(edgeProcessor.getBufferGray(), dst2);
@@ -265,6 +240,10 @@ void drawContours2f(ArrayList<MatOfPoint2f> cntrs) {
   }
 }
 void draw() {
+  background(125);
+  fill(0);
+  text("press 's' to save output frame",563,756);
+  scale(0.5);
   image(src, 0, 0);
   
   pushMatrix();
@@ -273,7 +252,9 @@ void draw() {
   image(dst2, src.width * 4.0/3, roi.height + 10);
   popMatrix();
   
-  image(output,src.width + 10,roi.height + 200);
+  
+  
+  image(output,src.width + 10,roi.height + 400);
   noFill();
   strokeWeight(4);
 
@@ -285,13 +266,6 @@ void draw() {
   translate(roi.x, roi.y);
   line(searchColumn, 0, searchColumn, src.height);
 
-  for (Sprocket sprocket : sprockets) {
-    stroke(0, 255, 0);
-    line(0, sprocket.top, src.width, sprocket.top);
-    stroke(255, 0, 0);
-    line(0, sprocket.bottom, src.width, sprocket.bottom);
-  }
-
   stroke(255);
   strokeWeight(3);
   drawContours2f(approximations);
@@ -301,6 +275,8 @@ void draw() {
   rect(selectedArea.x, selectedArea.y, selectedArea.width, selectedArea.height);
 }
 
-void mouseMoved(){
-  println(mouseX);
+void keyPressed(){
+  if(key == 's'){
+    output.save("output/out" + inputFilename);
+  }
 }
