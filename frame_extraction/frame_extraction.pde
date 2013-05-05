@@ -81,7 +81,7 @@ void setup() {
   src = loadImage(inputFilename);
   src.resize(resizedImageWidth, 0);
 
-  size(src.width, src.height);
+  size(src.width, src.height/2);
 
   // setup ROI
   roi = new Rectangle(0, roiTop, src.width, roiHeight);
