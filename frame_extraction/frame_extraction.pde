@@ -101,11 +101,9 @@ void setup() {
   
   // filter image to bring out horizontal lines
   // and binarize it
-  sprocketProcessor.findSobelEdges(0, 2);
-  
-  Imgproc.dilate(sprocketProcessor.getBufferGray(), sprocketProcessor.getBufferGray(), new Mat());
+  sprocketProcessor.findSobelEdges(0, 2);  
   sprocketProcessor.threshold(30);
-
+  sprocketProcessor.dilate();
   
   // create opencv object for finding left and right of frame
   edgeProcessor = new OpenCVPro(this, roi.width, roi.height);
@@ -115,11 +113,10 @@ void setup() {
   // and binarize it
   edgeProcessor.equalizeHistogram();
   edgeProcessor.findSobelEdges(2, 0);
-  
-//    Imgproc.erode(edgeProcessor.getBufferGray(), edgeProcessor.getBufferGray(), new Mat());
-
-  
+    
   edgeProcessor.threshold(100);
+    //edgeProcessor.erode();
+
 
   //Imgproc.dilate(opencv2.getBufferGray(), opencv2.getBufferGray(), new Mat());
 
