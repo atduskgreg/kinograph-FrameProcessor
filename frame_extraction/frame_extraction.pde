@@ -70,8 +70,8 @@ PImage src, dst, dst2, output;
 
 Rectangle selectedArea;
 
-ArrayList<MatOfPoint> contours;
-ArrayList<MatOfPoint2f> approximations;
+ArrayList<Contour> contours;
+ArrayList<Contour> approximations;
 
 Rectangle roi;
 
@@ -146,22 +146,25 @@ void setup() {
   // === BEGIN FIND RIGHT FRAME EDGE ===
 
   // find contours in the filtered edge image
-  contours = new ArrayList<MatOfPoint>();
-  Imgproc.findContours(edgeProcessor.getBufferGray(), contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-
-  // get rid of contours that are shorter than minVerticalEdgeLength
-  contours = filterContours(contours);
-
-  // convert the remaining contours into polygon approximations
-  // i.e. straight lines
-  approximations = createPolygonApproximations(contours);
+  contours = edgeProcessor.findContours();
+  approximations = new ArrayList<Contour>();
+  
+  // make polygon approximations of contours
+  // that are not too short (i.e. have too few points)
+  for(Contour c : contours){
+    if (c.getPoints().size() > minVerticalEdgeLength) {
+      approximations.add(c.getPolygonApproximation());
+    }
+  }
 
   println("num approximations: " + approximations.size());
 
   // find the rightmost approximation
   float frameRight = 0;
-  for(MatOfPoint2f edge : approximations){
-    float edgeX = (float)edge.toArray()[0].x;
+  for(Contour edge : approximations){
+    //float edgeX = (float)edge.toArray()[0].x;
+    float edgeX = edge.getPoints().get(0).x;
+    
     if(edgeX > frameRight && edgeX < searchColumn){
       frameRight = edgeX;
     }
@@ -190,55 +193,12 @@ void setup() {
   edgeProcessor.toPImage(edgeProcessor.getBufferGray(), dst2);
 }
 
-
-// === HELPER FUNCTIONS ===
-
-ArrayList<MatOfPoint> filterContours(ArrayList<MatOfPoint> cntrs) {
-  ArrayList<MatOfPoint> result = new ArrayList<MatOfPoint>();
-  for (MatOfPoint contour : cntrs) {
-    if (contour.toArray().length > minVerticalEdgeLength) {
-      result.add(contour);
-    }
-  }
-  return result;
-}
-
-ArrayList<MatOfPoint2f> createPolygonApproximations(ArrayList<MatOfPoint> cntrs) {
-  ArrayList<MatOfPoint2f> result = new ArrayList<MatOfPoint2f>();
-
-  double epsilon = cntrs.get(0).size().height * 0.01;
-
-  for (MatOfPoint contour : cntrs) {
-    MatOfPoint2f approx = new MatOfPoint2f();
-    Imgproc.approxPolyDP(new MatOfPoint2f(contour.toArray()), approx, epsilon, true);
-    result.add(approx);
-  }
-
-  return result;
-}
-
-void drawContours(ArrayList<MatOfPoint> cntrs) {
-  for (MatOfPoint contour : cntrs) {
-    beginShape();
-    Point[] points = contour.toArray();
-    for (int i = 0; i < points.length; i++) {
-      vertex((float)points[i].x, (float)points[i].y);
-    }
-    endShape();
+void drawContours(ArrayList<Contour> cntrs) {
+  for (Contour contour : cntrs) {
+    contour.draw();
   }
 }
 
-void drawContours2f(ArrayList<MatOfPoint2f> cntrs) {
-  for (MatOfPoint2f contour : cntrs) {
-    beginShape();
-    Point[] points = contour.toArray();
-
-    for (int i = 0; i < points.length; i++) {
-      vertex((float)points[i].x, (float)points[i].y);
-    }
-    endShape(CLOSE);
-  }
-}
 void draw() {
   background(125);
   fill(0);
@@ -268,7 +228,7 @@ void draw() {
 
   stroke(255);
   strokeWeight(3);
-  drawContours2f(approximations);
+  drawContours(approximations);
 
   strokeWeight(5);
   stroke(0, 255, 0);
