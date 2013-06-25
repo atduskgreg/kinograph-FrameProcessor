@@ -45,16 +45,6 @@
  */
 
 import gab.opencvpro.*;
-import org.opencv.imgproc.Imgproc;
-import org.opencv.core.Core;
-import org.opencv.core.Mat;
-import org.opencv.core.CvType;
-
-import org.opencv.core.MatOfPoint;
-import org.opencv.core.MatOfPoint2f;
-
-import org.opencv.core.Point;
-
 import java.awt.Rectangle;
 
 String inputFilename = "_MG_1267.JPG";
